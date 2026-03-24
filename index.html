@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Squliq Atayal 學習系統 v3.2</title>
+    <style>
+        :root { --primary: #b32428; --bg: #f8f9fa; --dark: #2c3e50; --border: #ddd; --success: #27ae60; --warning: #e67e22; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif; background: var(--bg); margin: 0; padding: 10px; color: var(--dark); line-height: 1.4; -webkit-text-size-adjust: 100%; }
+        .container { width: 100%; max-width: 700px; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); margin: 0 auto; box-sizing: border-box; }
+        header { text-align: center; border-bottom: 3px solid var(--primary); margin-bottom: 15px; padding-bottom: 10px; }
+        h1 { color: var(--primary); font-size: 1.4rem; margin: 0; }
+        .stats-panel { background: #fff5f5; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #ffebeb; }
+        .progress-container { background: #eee; height: 12px; border-radius: 6px; margin: 10px 0; overflow: hidden; }
+        .progress-bar { background: var(--success); height: 100%; width: 0%; transition: 0.5s; }
+        .stats-text { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold; }
+        #upload-area { border: 2px dashed var(--primary); padding: 30px 15px; text-align: center; border-radius: 10px; cursor: pointer; background: #fffdfd; }
+        .setup-box { display: none; flex-direction: column; gap: 12px; }
+        .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        button { padding: 15px; font-size: 1rem; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; -webkit-tap-highlight-color: transparent; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-review { background: var(--warning); color: white; grid-column: 1 / -1; }
+        #game-area { display: none; text-align: center; }
+        #main-word { font-size: 2.5rem; font-weight: bold; color: var(--primary); margin: 20px 0 5px 0; word-break: break-word; }
+        #sub-word { font-size: 1.2rem; color: #666; min-height: 1.5em; margin-bottom: 20px; }
+        input[type="text"] { width: 100%; padding: 15px; font-size: 1.2rem; margin-bottom: 10px; border: 2px solid var(--border); border-radius: 8px; box-sizing: border-box; text-align: center; outline: none; }
+        #feedback { font-size: 1.1rem; font-weight: bold; margin: 15px 0; min-height: 1.2em; }
+        .footer-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+        .nav-group { display: flex; gap: 10px; flex: 1; }
+        .nav-group button { flex: 1; }
+        .secondary { background: #6c757d; color: white; }
+        @media (min-width: 500px) { .footer-btns { flex-direction: row; } }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header><h1>Squliq Atayal 學習系統</h1></header>
+    <div class="stats-panel" id="stats-panel" style="display:none;">
+        <div class="stats-text"><span>掌握進度</span><span id="mastery-percent">0%</span></div>
+        <div class="progress-container"><div class="progress-bar" id="mastery-bar"></div></div>
+        <div class="stats-text" style="font-weight:normal; font-size:0.75rem; color:#666;"><span id="mastery-count">已掌握: 0 / 0</span><span id="mistake-count">待複習: 0</span></div>
+    </div>
+    <div id="upload-area" onclick="document.getElementById('file-input').click()"><h3>📂 載入單字 CSV</h3><input type="file" id="file-input" accept=".csv" style="display:none"></div>
+    <div id="setup-area" class="setup-box">
+        <select id="category-select" style="padding:10px; border-radius:8px;"></select>
+        <div class="mode-grid">
+            <button class="btn-primary" onclick="startGame('study')">📖 學習卡片</button>
+            <button class="btn-primary" onclick="startGame('choice')">🔍 選擇題</button>
+            <button class="btn-primary" onclick="startGame('fill-ty')">✏️ 中翻族語</button>
+            <button class="btn-primary" onclick="startGame('fill-zh')">✏️ 族語翻中</button>
+            <button id="review-btn" class="btn-review" onclick="startGame('review')" disabled>🔥 錯題特訓</button>
+        </div>
+    </div>
+    <div id="game-area">
+        <div id="main-word">---</div><div id="sub-word"></div>
+        <div id="action-zone"></div><div id="feedback"></div><div id="typo-hint" style="color:var(--warning); font-size:0.9rem;"></div>
+        <div class="footer-btns">
+            <div class="nav-group">
+                <button id="prev-btn" class="secondary" onclick="handlePrev()">上一個</button>
+                <button id="next-btn" class="btn-primary" onclick="handleNext()">下一步</button>
+            </div>
+            <button class="secondary" onclick="exitGame()">離開</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let ALL_WORDS = [];
+let state = { mode: '', pool: [], idx: 0, score: 0, isAnswered: false, lastActionTime: 0 };
+let mistakesDB = JSON.parse(localStorage.getItem('atayal_mistakes_v3')) || {};
+let masteredDB = JSON.parse(localStorage.getItem('atayal_mastered_v3')) || [];
+
+document.getElementById('file-input').onchange = (e) => {
+    if(!e.target.files.length) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => parseCSV(ev.target.result);
+    reader.readAsText(e.target.files[0], 'UTF-8');
+};
+
+function parseCSV(text) {
+    ALL_WORDS = [];
+    text.split(/\r?\n/).forEach(line => {
+        const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+        if (parts.length < 4) return;
+        let c2 = parts[2]?.replace(/"/g, '').trim(), c3 = parts[3]?.replace(/"/g, '').trim();
+        if (c2 === "中文" || !c2 || !c3) return;
+        ALL_WORDS.push({ c: "單元", z: c2, t: c3 });
+    });
+    document.getElementById('upload-area').style.display='none';
+    document.getElementById('setup-area').style.display='flex';
+    document.getElementById('stats-panel').style.display='block';
+    updateStats();
+}
+
+function updateStats() {
+    const total = ALL_WORDS.length;
+    const mastered = masteredDB.filter(t => ALL_WORDS.some(w => w.t === t)).length;
+    const percent = total > 0 ? Math.round((mastered / total) * 100) : 0;
+    document.getElementById('mastery-bar').style.width = percent + '%';
+    document.getElementById('mastery-percent').innerText = percent + '%';
+    document.getElementById('mastery-count').innerText = `掌握: ${mastered}/${total}`;
+    const mCount = Object.keys(mistakesDB).length;
+    document.getElementById('mistake-count').innerText = `待複習: ${mCount}`;
+    document.getElementById('review-btn').disabled = mCount === 0;
+}
+
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (state.mode === 'study' || state.isAnswered)) handleNext();
+});
+
+function startGame(mode) {
+    state.mode = mode; state.idx = 0; state.score = 0;
+    state.pool = mode === 'review' ? Object.values(mistakesDB) : [...ALL_WORDS].sort(() => Math.random() - 0.5);
+    document.getElementById('setup-area').style.display = 'none';
+    document.getElementById('game-area').style.display = 'block';
+    renderStep();
+}
+
+function renderStep() {
+    if(state.idx >= state.pool.length) { exitGame(); return; }
+    state.isAnswered = false;
+    const item = state.pool[state.idx];
+    const zone = document.getElementById('action-zone');
+    zone.innerHTML = ''; document.getElementById('feedback').innerText = ''; document.getElementById('typo-hint').innerText = '';
+    
+    // 同步顯示「上一個」按鈕
+    document.getElementById('prev-btn').style.visibility = (state.idx === 0) ? 'hidden' : 'visible';
+    document.getElementById('next-btn').innerText = state.mode === 'study' ? '下一項' : '提交';
+
+    if(state.mode === 'study') {
+        document.getElementById('main-word').innerText = item.t;
+        document.getElementById('sub-word').innerText = item.z;
+    } else if(state.mode === 'choice') {
+        document.getElementById('main-word').innerText = item.z;
+        document.getElementById('sub-word').innerText = '';
+        generateOptions(item.t).forEach(opt => {
+            const b = document.createElement('button'); b.className = 'btn-primary'; b.style.width='100%'; b.style.marginBottom='10px';
+            b.innerText = opt; b.onclick = () => { if(!state.isAnswered) checkAnswer(opt, item.t, item, b); };
+            zone.appendChild(b);
+        });
+    } else {
+        document.getElementById('main-word').innerText = state.mode === 'fill-ty' ? item.z : item.t;
+        document.getElementById('sub-word').innerText = '';
+        const input = document.createElement('input'); input.type = 'text'; input.placeholder = '請輸入...';
+        input.onkeydown = (e) => { if(e.key === 'Enter' && !state.isAnswered) checkAnswer(input.value, (state.mode==='fill-ty'?item.t:item.z), item); };
+        zone.appendChild(input);
+        if(window.innerWidth > 768) input.focus();
+    }
+}
+
+function checkAnswer(user, correct, item, btn = null) {
+    state.isAnswered = true; state.lastActionTime = Date.now();
+    const u = user.trim().toLowerCase().replace(/[’‘’`]/g, "'");
+    const c = correct.trim().toLowerCase().replace(/[’‘’`]/g, "'");
+    const isCorrect = u === c;
+    const fb = document.getElementById('feedback');
+    if(isCorrect) {
+        fb.innerText = '✨ 正確！'; fb.style.color = 'var(--success)';
+        state.score++; if(btn) btn.style.background = 'var(--success)';
+        if(!masteredDB.includes(item.t)) { masteredDB.push(item.t); localStorage.setItem('atayal_mastered_v3', JSON.stringify(masteredDB)); }
+    } else {
+        fb.innerText = `❌ 錯誤：${correct}`; fb.style.color = 'var(--primary)';
+        if(btn) btn.style.background = 'var(--primary)';
+        if(!mistakesDB[item.t]) mistakesDB[item.t] = item;
+        localStorage.setItem('atayal_mistakes_v3', JSON.stringify(mistakesDB));
+    }
+    document.getElementById('next-btn').innerText = '按此下一題';
+    updateStats();
+}
+
+function handleNext() { 
+    if(Date.now() - state.lastActionTime < 400) return; 
+    state.idx++; renderStep(); 
+}
+
+function handlePrev() { 
+    if(state.idx > 0) { state.idx--; renderStep(); } 
+}
+
+function exitGame() { 
+    document.getElementById('game-area').style.display='none'; 
+    document.getElementById('setup-area').style.display='flex'; 
+    updateStats(); 
+}
+
+function generateOptions(correct) {
+    let pool = ALL_WORDS.map(w => w.t);
+    let res = new Set([correct]);
+    while(res.size < 4) res.add(pool[Math.floor(Math.random()*pool.length)]);
+    return [...res].sort(() => Math.random() - 0.5);
+}
+</script>
+</body>
+</html>

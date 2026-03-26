@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Squliq Atayal 學習系統 v3.4</title>
+    <style>
+        :root { --primary: #b32428; --bg: #f8f9fa; --dark: #2c3e50; --border: #ddd; --success: #27ae60; --warning: #e67e22; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif; background: var(--bg); margin: 0; padding: 10px; color: var(--dark); line-height: 1.4; -webkit-text-size-adjust: 100%; }
+        .container { width: 100%; max-width: 700px; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); margin: 0 auto; box-sizing: border-box; }
+        header { text-align: center; border-bottom: 3px solid var(--primary); margin-bottom: 15px; padding-bottom: 10px; }
+        h1 { color: var(--primary); font-size: 1.4rem; margin: 0; }
+        
+        .stats-panel { background: #fff5f5; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #ffebeb; }
+        .progress-container { background: #eee; height: 12px; border-radius: 6px; margin: 10px 0; overflow: hidden; }
+        .progress-bar { background: var(--success); height: 100%; width: 0%; transition: 0.5s; }
+        .stats-text { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: bold; }
+
+        #upload-area { border: 2px dashed var(--primary); padding: 40px 20px; text-align: center; border-radius: 10px; cursor: pointer; background: #fffdfd; transition: 0.3s; }
+        #upload-area.hover { background: #ffebeb; border-style: solid; }
+        
+        .setup-box { display: none; flex-direction: column; gap: 12px; }
+        .search-box { margin-bottom: 5px; display: flex; flex-direction: column; gap: 5px; }
+        #global-search { padding: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 16px; width: 100%; box-sizing: border-box; }
+        #dict-results { max-height: 150px; overflow-y: auto; border: 1px solid #eee; background: #fff; font-size: 0.9rem; border-radius: 8px; }
+        .dict-row { padding: 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; }
+
+        .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        button { padding: 15px; font-size: 1rem; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-review { background: var(--warning); color: white; grid-column: 1 / -1; }
+        
+        #game-area { display: none; text-align: center; }
+        #main-word { font-size: 2.5rem; font-weight: bold; color: var(--primary); margin: 20px 0 5px 0; word-break: break-word; }
+        #sub-word { font-size: 1.2rem; color: #666; min-height: 1.5em; margin-bottom: 20px; }
+        input[type="text"] { width: 100%; padding: 15px; font-size: 1.2rem; margin-bottom: 10px; border: 2px solid var(--border); border-radius: 8px; box-sizing: border-box; text-align: center; outline: none; }
+        #feedback { font-size: 1.1rem; font-weight: bold; margin: 15px 0; min-height: 1.2em; }
+        
+        .footer-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+        .nav-group { display: flex; gap: 10px; flex: 1; }
+        .nav-group button { flex: 1; }
+        .secondary { background: #6c757d; color: white; }
+        @media (min-width: 500px) { .footer-btns { flex-direction: row; } }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header><h1>Squliq Atayal 學習系統 v3.4</h1></header>
+    
+    <div class="stats-panel" id="stats-panel" style="display:none;">
+        <div class="stats-text"><span>掌握進度</span><span id="mastery-percent">0%</span></div>
+        <div class="progress-container"><div class="progress-bar" id="mastery-bar"></div></div>
+        <div class="stats-text" style="font-weight:normal; font-size:0.75rem; color:#666;"><span id="mastery-count">已掌握: 0 / 0</span><span id="mistake-count">待複習: 0</span></div>
+    </div>
+
+    <div id="upload-area">
+        <h3>📂 載入單字 CSV</h3>
+        <p>電腦拖曳或手機點擊皆可</p>
+        <input type="file" id="file-input" accept=".csv" style="display:none">
+    </div>
+
+    <div id="setup-area" class="setup-box">
+        <div class="search-box">
+            <input type="text" id="global-search" placeholder="🔍 搜尋單字 (中/族)..." oninput="handleGlobalSearch()">
+            <div id="dict-results" style="display:none;"></div>
+        </div>
+        <label><b>選擇單元：</b></label>
+        <select id="category-select" style="padding:10px; border-radius:8px;"></select>
+        <div class="mode-grid">
+            <button class="btn-primary" onclick="startGame('study')">📖 學習卡片</button>
+            <button class="btn-primary" onclick="startGame('choice')">🔍 選擇題</button>
+            <button class="btn-primary" onclick="startGame('fill-ty')">✏️ 中翻族語</button>
+            <button class="btn-primary" onclick="startGame('fill-zh')">✏️ 族語翻中</button>
+            <button id="review-btn" class="btn-review" onclick="startGame('review')" disabled>🔥 錯題特訓</button>
+        </div>
+    </div>
+
+    <div id="game-area">
+        <div id="main-word">---</div><div id="sub-word"></div>
+        <div id="action-zone"></div><div id="feedback"></div><div id="typo-hint" style="color:var(--warning); font-size:0.9rem;"></div>
+        <div class="footer-btns">
+            <div class="nav-group">
+                <button id="prev-btn" class="secondary" onclick="handlePrev()">上一個</button>
+                <button id="next-btn" class="btn-primary" onclick="handleNext()">提交答案</button>
+            </div>
+            <button class="secondary" onclick="exitGame()">返回選單</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let ALL_WORDS = [];
+let state = { mode: '', pool: [], idx: 0, score: 0, isAnswered: false, lastActionTime: 0 };
+let mistakesDB = JSON.parse(localStorage.getItem('atayal_mistakes_v3')) || {};
+let masteredDB = JSON.parse(localStorage.getItem('atayal_mastered_v3')) || [];
+
+const uploadArea = document.getElementById('upload-area');
+const fileInput = document.getElementById('file-input');
+
+uploadArea.onclick = () => fileInput.click();
+uploadArea.ondragover = (e) => { e.preventDefault(); uploadArea.classList.add('hover'); };
+uploadArea.ondragleave = () => uploadArea.classList.remove('hover');
+uploadArea.ondrop = (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('hover');
+    if(e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]);
+};
+fileInput.onchange = (e) => { if(e.target.files.length) processFile(e.target.files[0]); };
+
+function processFile(file) {
+    const reader = new FileReader();
+    reader.onload = (ev) => parseCSV(ev.target.result);
+    reader.readAsText(file, 'UTF-8');
+}
+
+function parseCSV(text) {
+    ALL_WORDS = [];
+    const lines = text.split(/\r?\n/);
+    let currentCat = "未分類";
+    lines.forEach(line => {
+        const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+        if (parts.length < 3) return;
+        let c0 = parts[0].replace(/"/g, '').trim();
+        let c1 = parts[1]?.replace(/"/g, '').trim();
+        let c2 = parts[2]?.replace(/"/g, '').trim();
+        let c3 = parts[3]?.replace(/"/g, '').trim();
+        if (c0 === "類別") { currentCat = c1; return; }
+        if (c2 === "中文" || !c2 || !c3) return;
+        ALL_WORDS.push({ c: currentCat, z: c2, t: c3 });
+    });
+    initUI();
+}
+
+function initUI() {
+    document.getElementById('upload-area').style.display='none';
+    document.getElementById('setup-area').style.display='flex';
+    document.getElementById('stats-panel').style.display='block';
+    const sel = document.getElementById('category-select');
+    sel.innerHTML = '';
+    [...new Set(ALL_WORDS.map(w => w.c))].forEach(c => {
+        const opt = document.createElement('option'); opt.value = c; opt.innerText = c; sel.appendChild(opt);
+    });
+    updateStats();
+}
+
+function updateStats() {
+    const total = ALL_WORDS.length;
+    const mastered = masteredDB.filter(t => ALL_WORDS.some(w => w.t === t)).length;
+    const percent = total > 0 ? Math.round((mastered / total) * 100) : 0;
+    document.getElementById('mastery-bar').style.width = percent + '%';
+    document.getElementById('mastery-percent').innerText = percent + '%';
+    document.getElementById('mastery-count').innerText = `掌握: ${mastered}/${total}`;
+    const mCount = Object.keys(mistakesDB).length;
+    document.getElementById('mistake-count').innerText = `待複習: ${mCount}`;
+    document.getElementById('review-btn').disabled = mCount === 0;
+}
+
+// 搜尋功能
+function handleGlobalSearch() {
+    const q = document.getElementById('global-search').value.toLowerCase();
+    const resDiv = document.getElementById('dict-results');
+    if(!q) { resDiv.style.display = 'none'; return; }
+    const filtered = ALL_WORDS.filter(w => w.z.includes(q) || w.t.toLowerCase().includes(q)).slice(0, 15);
+    if(filtered.length > 0) {
+        resDiv.style.display = 'block';
+        resDiv.innerHTML = filtered.map(w => `<div class="dict-row"><span>${w.t}</span><span style="color:#888">${w.z}</span></div>`).join('');
+    } else {
+        resDiv.style.display = 'none';
+    }
+}
+
+// 鍵盤與按鈕邏輯
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        if (document.getElementById('game-area').style.display === 'block') {
+            // 在填空模式且尚未回答時，讓 input 的 onkeydown 優先處理
+            if (state.mode === 'study' || state.isAnswered) handleNext();
+        }
+    }
+});
+
+function startGame(mode) {
+    state.mode = mode; state.idx = 0; state.score = 0;
+    state.pool = mode === 'review' ? Object.values(mistakesDB) : ALL_WORDS.filter(w => w.c === document.getElementById('category-select').value).sort(() => Math.random() - 0.5);
+    document.getElementById('setup-area').style.display = 'none';
+    document.getElementById('game-area').style.display = 'block';
+    renderStep();
+}
+
+function renderStep() {
+    if(state.idx >= state.pool.length) { exitGame(); return; }
+    state.isAnswered = false;
+    const item = state.pool[state.idx];
+    const zone = document.getElementById('action-zone');
+    zone.innerHTML = ''; 
+    document.getElementById('feedback').innerText = ''; 
+    document.getElementById('typo-hint').innerText = '';
+    
+    // 修正1：只有學習模式顯示「上一個」
+    const prevBtn = document.getElementById('prev-btn');
+    if (state.mode === 'study') {
+        prevBtn.style.display = 'block';
+        prevBtn.style.visibility = (state.idx === 0) ? 'hidden' : 'visible';
+    } else {
+        prevBtn.style.display = 'none';
+    }
+
+    document.getElementById('next-btn').innerText = state.mode === 'study' ? '下一項' : '提交答案';
+
+    if(state.mode === 'study') {
+        document.getElementById('main-word').innerText = item.t;
+        document.getElementById('sub-word').innerText = item.z;
+    } else if(state.mode === 'choice') {
+        document.getElementById('main-word').innerText = item.z;
+        document.getElementById('sub-word').innerText = '';
+        generateOptions(item.t).forEach(opt => {
+            const b = document.createElement('button'); b.className = 'btn-primary'; b.style.width='100%'; b.style.marginBottom='10px';
+            b.innerText = opt; 
+            b.onclick = () => { if(!state.isAnswered) checkAnswer(opt, item.t, item, b); };
+            zone.appendChild(b);
+        });
+    } else {
+        document.getElementById('main-word').innerText = state.mode === 'fill-ty' ? item.z : item.t;
+        document.getElementById('sub-word').innerText = '';
+        const input = document.createElement('input'); 
+        input.type = 'text'; input.id = 'user-input'; input.placeholder = '請輸入答案...';
+        input.onkeydown = (e) => { 
+            if(e.key === 'Enter' && !state.isAnswered) {
+                e.preventDefault(); e.stopPropagation();
+                checkAnswer(input.value, (state.mode==='fill-ty'?item.t:item.z), item); 
+            }
+        };
+        zone.appendChild(input);
+        if(window.innerWidth > 768) input.focus();
+    }
+}
+
+function checkAnswer(user, correct, item, btn = null) {
+    if(state.isAnswered) return;
+    state.isAnswered = true;
+    state.lastActionTime = Date.now(); // 鎖定點擊
+
+    const u = user.trim().toLowerCase().replace(/[’‘’`]/g, "'");
+    const c = correct.trim().toLowerCase().replace(/[’‘’`]/g, "'");
+    const isCorrect = u === c;
+    const fb = document.getElementById('feedback');
+    
+    if(isCorrect) {
+        fb.innerText = '✨ 正確！'; fb.style.color = 'var(--success)';
+        state.score++; if(btn) btn.style.background = 'var(--success)';
+        if(!masteredDB.includes(item.t)) { masteredDB.push(item.t); localStorage.setItem('atayal_mastered_v3', JSON.stringify(masteredDB)); }
+    } else {
+        fb.innerText = `❌ 錯誤：${correct}`; fb.style.color = 'var(--primary)';
+        if(btn) btn.style.background = 'var(--primary)';
+        if(!mistakesDB[item.t]) mistakesDB[item.t] = item;
+        localStorage.setItem('atayal_mistakes_v3', JSON.stringify(mistakesDB));
+    }
+    document.getElementById('next-btn').innerText = '下一題 (Enter)';
+    
+    // 修正2：點擊按鈕後將下一步按鈕設為可正常點擊跳題
+    const nextBtn = document.getElementById('next-btn');
+    nextBtn.onclick = () => handleNext(); 
+    updateStats();
+}
+
+function handleNext() { 
+    // 防止連跳的冷卻邏輯
+    const now = Date.now();
+    if(now - state.lastActionTime < 400) return; 
+    state.lastActionTime = now;
+    
+    // 如果在測驗模式且尚未回答，點擊下一步應視為提交或提示
+    if(!state.isAnswered && state.mode !== 'study') {
+        const input = document.getElementById('user-input');
+        const item = state.pool[state.idx];
+        const correct = state.mode==='fill-ty'?item.t:item.z;
+        checkAnswer(input ? input.value : "", correct, item);
+        return;
+    }
+
+    state.idx++; 
+    renderStep(); 
+}
+
+function handlePrev() { if(state.idx > 0) { state.idx--; renderStep(); } }
+function exitGame() { document.getElementById('game-area').style.display='none'; document.getElementById('setup-area').style.display='flex'; updateStats(); }
+
+function generateOptions(correct) {
+    let pool = ALL_WORDS.map(w => w.t);
+    let res = new Set([correct]);
+    while(res.size < 4) res.add(pool[Math.floor(Math.random()*pool.length)]);
+    return [...res].sort(() => Math.random() - 0.5);
+}
+</script>
+</body>
+</html>
